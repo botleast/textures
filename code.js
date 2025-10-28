@@ -6,6 +6,7 @@ let dumpedVarNames = {};
 const storeName = "a" + crypto.randomUUID().replaceAll("-", "").substring(16);
 const vapeName = crypto.randomUUID().replaceAll("-", "").substring(16);
 const VERSION = "3.0.7";
+
 function replaceAndCopyFunction(oldFunc, newFunc) {
 	return new Proxy(oldFunc, {
 		apply(orig, origIden, origArgs) {
@@ -27,6 +28,7 @@ Object.getOwnPropertyDescriptors = replaceAndCopyFunction(Object.getOwnPropertyD
 	delete list[storeName];
 	return list;
 });
+
 /**
  *
  * @param {string} replacement
@@ -47,25 +49,27 @@ function addDump(replacement, code) {
  */
 function modifyCode(text) {
 	let modifiedText = text;
-for (const [name, regex] of Object.entries(dumpedVarNames)) {
+	for (const [name, regex] of Object.entries(dumpedVarNames)) {
 		const matched = modifiedText.match(regex);
 		if (matched) {
 			for (const [replacement, code] of Object.entries(replacements)) {
 				delete replacements[replacement];
-replacements[replacement.replaceAll(name, matched[1])] = [code[0].replaceAll(name, matched[1]), code[1]];
+				replacements[replacement.replaceAll(name, matched[1])] = [code[0].replaceAll(name, matched[1]), code[1]];
 			}
 		}
 	}
 	const unmatchedDumps = Object.entries(dumpedVarNames).filter(e => !modifiedText.match(e[1]));
 	if (unmatchedDumps.length > 0) console.warn("Unmatched dumps:", unmatchedDumps);
-const unmatchedReplacements = Object.entries(replacements).filter(r => modifiedText.replace(r[0]) === text);
+
+	const unmatchedReplacements = Object.entries(replacements).filter(r => modifiedText.replace(r[0]) === text);
 	if (unmatchedReplacements.length > 0) console.warn("Unmatched replacements:", unmatchedReplacements);
-for (const [replacement, code] of Object.entries(replacements)) {
+
+	for (const [replacement, code] of Object.entries(replacements)) {
 		modifiedText = modifiedText.replace(replacement, code[1] ? code[0] : replacement + code[0]);
 	}
 
 	const newScript = document.createElement("script");
-newScript.type = "module";
+	newScript.type = "module";
 	newScript.crossOrigin = "";
 	newScript.textContent = modifiedText;
 	const head = document.querySelector("head");
@@ -110,10 +114,9 @@ newScript.type = "module";
 		}
 
 		let j;
-		for (j = 0;
-j < 26; j++) keybindList[j + 65] = keybindList["Key" + String.fromCharCode(j + 65)] = String.fromCharCode(j + 97);
-for (j = 0; j < 10; j++) keybindList[48 + j] = keybindList["Digit" + j] = "" + j;
-window.addEventListener("keydown", function(key) {
+		for (j = 0; j < 26; j++) keybindList[j + 65] = keybindList["Key" + String.fromCharCode(j + 65)] = String.fromCharCode(j + 97);
+		for (j = 0; j < 10; j++) keybindList[48 + j] = keybindList["Digit" + j] = "" + j;
+		window.addEventListener("keydown", function(key) {
 			const func = keybindCallbacks[keybindList[key.code]];
 			if (func) func(key);
 		});
@@ -121,7 +124,8 @@ window.addEventListener("keydown", function(key) {
 
 	// ブランディング表示を削除
 	addModification('VERSION$1," | ",', `""," | ",`);
-// DRAWING SETUP - テクスチャ名を変更
+
+	// DRAWING SETUP - テクスチャ名を変更
 	addModification('I(this,"glintTexture");', `
 		I(this, "customTexture");
 	`);
@@ -131,7 +135,7 @@ window.addEventListener("keydown", function(key) {
 	 */
 	const corsMoment = url => {
 		return new URL(`https://corsproxy.io/?url=${url}`).href;
-}
+	}
 	addModification('skinManager.loadTextures(),', ',this.loadCustom(),');
 	addModification('async loadSpritesheet(){', `
 		async loadCustom() {
@@ -139,18 +143,20 @@ window.addEventListener("keydown", function(key) {
 		}
 		async loadSpritesheet(){
 	`, true);
-addModification('COLOR_TOOLTIP_BG,BORDER_SIZE)}', `
+
+	addModification('COLOR_TOOLTIP_BG,BORDER_SIZE)}', `
 		function drawImage(ctx, img, posX, posY, sizeX, sizeY, color) {
 			if (color) {
 				ctx.fillStyle = color;
 				ctx.fillRect(posX, posY, sizeX, sizeY);
-ctx.globalCompositeOperation = "destination-in";
+				ctx.globalCompositeOperation = "destination-in";
 			}
 			ctx.drawImage(img, posX, posY, sizeX, sizeY);
 			if (color) ctx.globalCompositeOperation = "source-over";
 		}
 	`);
-// CUSTOM SKIN TEXT DISPLAY - Custom Skinテキストのみ左上に表示
+
+	// CUSTOM SKIN TEXT DISPLAY - Custom Skinテキストのみ左上に表示
 	addModification('(this.drawSelectedItemStack(),this.drawHintBox())', /*js*/`
 		// Custom Skinテキストを左上に表示
 		if (ctx$5 && enabledModules["CustomSkin"]) {
@@ -178,8 +184,7 @@ ctx.globalCompositeOperation = "destination-in";
 			let offset = 0;
 			let stringList = [];
 			for(const [module, value] of Object.entries(enabledModules)) {
-				if (!value || module == "TextGUI" || module == "CustomSkin") continue;
-// CustomSkinは除外
+				if (!value || module == "TextGUI" || module == "CustomSkin") continue; // CustomSkinは除外
 				stringList.push(module);
 			}
 
@@ -188,10 +193,11 @@ ctx.globalCompositeOperation = "destination-in";
 				const compB = ctx$5.measureText(b).width;
 				return compA < compB ? 1 : -1;
 			});
-for(const module of stringList) {
+
+			for(const module of stringList) {
 				offset++;
 				drawText(ctx$5, module, posX, posY + ((textguisize[1] + 3) * offset), textguisize[1] + "px " + textguifont[1], \`HSL(\${((colorOffset - (0.025 * offset)) % 1) * 360}, 100%, 50%)\`, "left", "top", 1, textguishadow[1]);
-}
+			}
 		}
 	`);
 
@@ -202,8 +208,7 @@ for(const module of stringList) {
 		}
 	`);
 	addModification('this.game.unleash.isEnabled("disable-ads")', 'true', true);
-	addModification('h.render()})', ';
-for(const [index, func] of Object.entries(renderTickLoop)) if (func) func();');
+	addModification('h.render()})', '; for(const [index, func] of Object.entries(renderTickLoop)) if (func) func();');
 
 	// MUSIC FIX
 	addModification('const u=lodashExports.sample(MUSIC);',
@@ -218,9 +223,9 @@ for(const [index, func] of Object.entries(renderTickLoop)) if (func) func();');
 			customSkinApplied = true;
 			handRecreationPending = true;
 			
-			// プレイヤーのスキンを変更 (Client-side only)
+			// プレイヤーのスキンを変更
 			player.profile.cosmetics.skin = "CustomSkin";
-			// h.cosmetics.skin = "CustomSkin"; // <-- REMOVED: Ensures other players do not see the custom skin.
+			h.cosmetics.skin = "CustomSkin";
 			
 			// 手の再生成を少し遅らせる
 			setTimeout(() => {
@@ -236,7 +241,7 @@ for(const [index, func] of Object.entries(renderTickLoop)) if (func) func();');
 						if (skinManager.skins["CustomSkin"]) {
 							hud3D.rightArm = new RightArm(skinManager.skins["CustomSkin"]);
 							hud3D.add(hud3D.rightArm);
-}
+						}
 						
 						handRecreationPending = false;
 					} catch(e) {
@@ -253,7 +258,7 @@ for(const [index, func] of Object.entries(renderTickLoop)) if (func) func();');
 								}
 							}
 						}, 1000);
-}
+					}
 				}
 			}, 500);
 		}
@@ -297,7 +302,7 @@ for(const [index, func] of Object.entries(renderTickLoop)) if (func) func();');
 					et();
 				}, void 0, function(rt) {
 					console.error(rt);
-et();
+					et();
 				});
 			});
 		}
@@ -305,7 +310,8 @@ et();
 
 	// KEY FIX
 	addModification('Object.assign(keyMap,u)', '; keyMap["Semicolon"] = "semicolon"; keyMap["Apostrophe"] = "apostrophe";');
-// COMMANDS - 基本的なコマンドのみ保持
+
+	// COMMANDS - 基本的なコマンドのみ保持
 	addModification('submit(u){', /*js*/`
 		const str = this.inputValue.toLocaleLowerCase();
 		const args = str.split(" ");
@@ -340,21 +346,22 @@ et();
 					try {
 						if (hud3D.rightArm) {
 							hud3D.remove(hud3D.rightArm);
-hud3D.rightArm = undefined;
+							hud3D.rightArm = undefined;
 						}
 						hud3D.rightArm = new RightArm(skinManager.skins["CustomSkin"]);
 						hud3D.add(hud3D.rightArm);
 						game.chat.addChat({text: "Hand recreated successfully!", color: "lime"});
-} catch(e) {
+					} catch(e) {
 						game.chat.addChat({text: "Failed to recreate hand: " + e.message, color: "red"});
-}
+					}
 				} else {
 					game.chat.addChat({text: "CustomSkin not loaded or hud3D not available", color: "red"});
 				}
 				return this.closeInput();
 		}
 	`);
-// MAIN - 基本機能のみ保持（ブランディング削除）
+
+	// MAIN - 基本機能のみ保持（ブランディング削除）
 	addModification('document.addEventListener("contextmenu",m=>m.preventDefault());', /*js*/`
 		(function() {
 			class Module {
@@ -382,8 +389,7 @@ hud3D.rightArm = undefined;
 							module.toggle();
 							game.chat.addChat({
 								text: module.name + (module.enabled ? " Enabled!" : " Disabled!"),
-								color: module.enabled ?
-"lime" : "red"
+								color: module.enabled ? "lime" : "red"
 							});
 						}
 					};
@@ -396,7 +402,8 @@ hud3D.rightArm = undefined;
 
 			// 基本的なモジュールのみ
 			new Module("MusicFix", function() {});
-const customskin = new Module("CustomSkin", function(enabled) {
+
+			const customskin = new Module("CustomSkin", function(enabled) {
 				if (enabled) {
 					// 定期的に手の状態をチェックして必要に応じて再生成
 					renderTickLoop["CustomSkinHandCheck"] = function() {
@@ -422,13 +429,13 @@ const customskin = new Module("CustomSkin", function(enabled) {
 					handRecreationPending = false;
 				}
 			});
-customskin.toggle();
+			customskin.toggle();
 
 			// TextGUIモジュールを追加
 			const textgui = new Module("TextGUI", function() {});
 			textguifont = textgui.addoption("Font", String, "Arial");
 			textguisize = textgui.addoption("TextSize", Number, 15);
-textguishadow = textgui.addoption("Shadow", Boolean, true);
+			textguishadow = textgui.addoption("Shadow", Boolean, true);
 			textgui.toggle();
 
 			globalThis.${storeName}.modules = modules;
@@ -438,37 +445,37 @@ textguishadow = textgui.addoption("Shadow", Boolean, true);
 
 	async function saveVapeConfig(profile) {
 		if (!loadedConfig) return;
-let saveList = {};
+		let saveList = {};
 		for (const [name, module] of Object.entries(unsafeWindow.globalThis[storeName].modules)) {
 			saveList[name] = { enabled: module.enabled, bind: module.bind, options: {} };
-for (const [option, setting] of Object.entries(module.options)) {
+			for (const [option, setting] of Object.entries(module.options)) {
 				saveList[name].options[option] = setting[1];
 			}
 		}
 		GM_setValue("vapeConfig" + (profile ?? unsafeWindow.globalThis[storeName].profile), JSON.stringify(saveList));
 		GM_setValue("mainVapeConfig", JSON.stringify({ profile: unsafeWindow.globalThis[storeName].profile }));
-};
+	};
 
 	async function loadVapeConfig(switched) {
 		loadedConfig = false;
 		const loadedMain = JSON.parse(await GM_getValue("mainVapeConfig", "{}")) ?? { profile: "default" };
-unsafeWindow.globalThis[storeName].profile = switched ?? loadedMain.profile;
+		unsafeWindow.globalThis[storeName].profile = switched ?? loadedMain.profile;
 		const loaded = JSON.parse(await GM_getValue("vapeConfig" + unsafeWindow.globalThis[storeName].profile, "{}"));
 		if (!loaded) {
 			loadedConfig = true;
 			return;
-}
+		}
 
 		for (const [name, module] of Object.entries(loaded)) {
 			const realModule = unsafeWindow.globalThis[storeName].modules[name];
 			if (!realModule) continue;
 			if (realModule.enabled != module.enabled) realModule.toggle();
-if (realModule.bind != module.bind) realModule.setbind(module.bind);
+			if (realModule.bind != module.bind) realModule.setbind(module.bind);
 			if (module.options) {
 				for (const [option, setting] of Object.entries(module.options)) {
 					const realOption = realModule.options[option];
 					if (!realOption) continue;
-realOption[1] = setting;
+					realOption[1] = setting;
 				}
 			}
 		}
@@ -476,12 +483,12 @@ realOption[1] = setting;
 	};
 
 	let loadedConfig = false;
-async function execute(src, oldScript) {
+	async function execute(src, oldScript) {
 		Object.defineProperty(unsafeWindow.globalThis, storeName, { value: {}, enumerable: false });
 		if (oldScript) oldScript.type = 'javascript/blocked';
-await fetch(src).then(e => e.text()).then(e => modifyCode(e));
+		await fetch(src).then(e => e.text()).then(e => modifyCode(e));
 		if (oldScript) oldScript.type = 'module';
-await new Promise((resolve) => {
+		await new Promise((resolve) => {
 			const loop = setInterval(async function () {
 				if (unsafeWindow.globalThis[storeName].modules) {
 					clearInterval(loop);
@@ -491,14 +498,14 @@ await new Promise((resolve) => {
 		});
 		unsafeWindow.globalThis[storeName].saveVapeConfig = saveVapeConfig;
 		unsafeWindow.globalThis[storeName].loadVapeConfig = loadVapeConfig;
-loadVapeConfig();
+		loadVapeConfig();
 		setInterval(async function () {
 			saveVapeConfig();
 		}, 10000);
 	}
 
 	const publicUrl = "scripturl";
-if (publicUrl == "scripturl") {
+	if (publicUrl == "scripturl") {
 		if (navigator.userAgent.indexOf("Firefox") != -1) {
 			window.addEventListener("beforescriptexecute", function (e) {
 				if (e.target.src.includes("https://miniblox.io/assets/index")) {
@@ -507,7 +514,7 @@ if (publicUrl == "scripturl") {
 					execute(e.target.src);
 				}
 			}, false);
-}
+		}
 		else {
 			new MutationObserver(async (mutations, observer) => {
 				let oldScript = mutations
@@ -523,10 +530,9 @@ if (publicUrl == "scripturl") {
 				childList: true,
 				subtree: true,
 			});
-}
+		}
 	}
 	else {
 		execute(publicUrl);
 	}
 })();
-}
