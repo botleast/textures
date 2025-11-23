@@ -81,7 +81,7 @@ function modifyCode(text) {
 (function () {
 	'use strict';
 
-	// DUMPING - 基本的なダンプのみ保持
+	// DUMPING
 	addDump('keyPressedDump', 'function ([a-zA-Z]*)\\([a-zA-Z]*\\)\{return keyPressed\\([a-zA-Z]*\\)');
 
 	// PRE
@@ -104,8 +104,6 @@ function modifyCode(text) {
 		let renderTickLoop = {};
 
 		let textguifont, textguisize, textguishadow;
-		let customSkinApplied = false;
-		let handRecreationPending = false;
 
 		function getModule(s) {
 			for(const [n, m] of Object.entries(modules)) {
@@ -121,11 +119,9 @@ function modifyCode(text) {
 			if (func) func(key);
 		});
 	`);
-
-	// ブランディング表示を削除
 	addModification('VERSION$1," | ",', `""," | ",`);
 
-	// DRAWING SETUP - テクスチャ名を変更
+	// DRAWING SETUP
 	addModification('I(this,"glintTexture");', `
 		I(this, "customTexture");
 	`);
@@ -139,7 +135,7 @@ function modifyCode(text) {
 	addModification('skinManager.loadTextures(),', ',this.loadCustom(),');
 	addModification('async loadSpritesheet(){', `
 		async loadCustom() {
-			this.customTexture = await this.loader.loadAsync("${corsMoment("https://raw.githubusercontent.com/kaineko-moka/hello/refs/heads/main/moka.png")}");
+			this.customTexture = await this.loader.loadAsync("${corsMoment("https://codeberg.org/RealPacket/VapeForMiniblox/raw/branch/main/assets/logo.png")}");
 		}
 		async loadSpritesheet(){
 	`, true);
@@ -156,35 +152,20 @@ function modifyCode(text) {
 		}
 	`);
 
-	// CUSTOM SKIN TEXT DISPLAY - Custom Skinテキストのみ左上に表示
+	// TEXT GUI
 	addModification('(this.drawSelectedItemStack(),this.drawHintBox())', /*js*/`
-		// Custom Skinテキストを左上に表示
-		if (ctx$5 && enabledModules["CustomSkin"]) {
-			const colorOffset = (Date.now() / 2000);
-			const posX = 15;
-			const posY = 25;
-			
-			ctx$5.font = "bold 20px Arial";
-			ctx$5.strokeStyle = "black";
-			ctx$5.lineWidth = 2;
-			ctx$5.fillStyle = \`HSL(\${(colorOffset % 1) * 360}, 100%, 60%)\`;
-			
-			// 影を描画（アウトライン効果）
-			ctx$5.strokeText("Custom Skin", posX, posY);
-			// メインテキストを描画
-			ctx$5.fillText("Custom Skin", posX, posY);
-		}
-
-		// TEXT GUI - その他のモジュール表示（CustomSkinは除外）
 		if (ctx$5 && enabledModules["TextGUI"]) {
 			const colorOffset = (Date.now() / 4000);
 			const posX = 15;
-			const posY = 50; // Custom Skinテキストより下に配置
+			const posY = 17;
+			ctx$5.imageSmoothingEnabled = true;
+			ctx$5.imageSmoothingQuality = "high";
+			drawImage(ctx$5, textureManager.customTexture.image, posX, posY, 80, 21, \`HSL(\${(colorOffset % 1) * 360}, 100%, 50%)\`);
 
 			let offset = 0;
 			let stringList = [];
 			for(const [module, value] of Object.entries(enabledModules)) {
-				if (!value || module == "TextGUI" || module == "CustomSkin") continue; // CustomSkinは除外
+				if (!value || module == "TextGUI") continue;
 				stringList.push(module);
 			}
 
@@ -196,7 +177,7 @@ function modifyCode(text) {
 
 			for(const module of stringList) {
 				offset++;
-				drawText(ctx$5, module, posX, posY + ((textguisize[1] + 3) * offset), textguisize[1] + "px " + textguifont[1], \`HSL(\${((colorOffset - (0.025 * offset)) % 1) * 360}, 100%, 50%)\`, "left", "top", 1, textguishadow[1]);
+				drawText(ctx$5, module, posX + 6, posY + 12 + ((textguisize[1] + 3) * offset), textguisize[1] + "px " + textguifont[1], \`HSL(\${((colorOffset - (0.025 * offset)) % 1) * 360}, 100%, 50%)\`, "left", "top", 1, textguishadow[1]);
 			}
 		}
 	`);
@@ -217,92 +198,40 @@ function modifyCode(text) {
 			return;
 		const u = lodashExports.sample(MUSIC);`, true)
 
-	// 改良されたスキン修正 - 手の描画問題を解決
+	// REBIND
+	addModification('bindKeysWithDefaults("b",m=>{', 'bindKeysWithDefaults("semicolon",m=>{', true);
+	addModification('bindKeysWithDefaults("i",m=>{', 'bindKeysWithDefaults("apostrophe",m=>{', true);
+
+	// SKIN MODIFICATION
 	addModification('ClientSocket.on("CPacketSpawnPlayer",h=>{const p=m.world.getPlayerById(h.id);', `
 		if (h.socketId === player.socketId && enabledModules["CustomSkin"]) {
-			customSkinApplied = true;
-			handRecreationPending = true;
-			
-			// プレイヤーのスキンを変更
+			if (hud3D && hud3D.rightArm) {
+				try {
+					hud3D.remove(hud3D.rightArm);
+					hud3D.rightArm = undefined;
+				} catch(e) {
+					console.warn("Hand removal failed:", e);
+				}
+			}
 			player.profile.cosmetics.skin = "CustomSkin";
 			h.cosmetics.skin = "CustomSkin";
-			
-			// 手の再生成を少し遅らせる
-			setTimeout(() => {
-				if (handRecreationPending && hud3D) {
-					try {
-						// 既存の手を削除
-						if (hud3D.rightArm) {
-							hud3D.remove(hud3D.rightArm);
-							hud3D.rightArm = undefined;
-						}
-						
-						// 新しい手を作成
-						if (skinManager.skins["CustomSkin"]) {
-							hud3D.rightArm = new RightArm(skinManager.skins["CustomSkin"]);
-							hud3D.add(hud3D.rightArm);
-						}
-						
-						handRecreationPending = false;
-					} catch(e) {
-						console.warn("Hand recreation failed:", e);
-						// 失敗した場合は少し後にリトライ
-						setTimeout(() => {
-							if (handRecreationPending && hud3D && skinManager.skins["CustomSkin"]) {
-								try {
-									hud3D.rightArm = new RightArm(skinManager.skins["CustomSkin"]);
-									hud3D.add(hud3D.rightArm);
-									handRecreationPending = false;
-								} catch(e2) {
-									console.warn("Hand recreation retry failed:", e2);
-								}
-							}
-						}, 1000);
-					}
-				}
-			}, 500);
 		}
 	`);
-
-	// スキン定義を追加
 	addModification('bob:{id:"bob",name:"Bob",tier:0,skinny:!1},', 'CustomSkin:{id:"CustomSkin",name:"CustomSkin",tier:2,skinny:!1},');
-	
-	// スキンダウンロード処理を改良
 	addModification('async downloadSkin(u){', `
 		if (u == "CustomSkin") {
 			const $ = skins[u];
 			return new Promise((et, tt) => {
-				textureManager.loader.load("https://raw.githubusercontent.com/Opera-cb/Skin-for-miniblox/refs/heads/main/test.png", rt => {
+				textureManager.loader.load("https://t.novaskin.me/1f769e7a3b71e95c9fd291dfe9979aebccbffbbe37d22126e9f187060ac99484", rt => {
 					const nt = {
 						atlas: rt,
 						id: u,
 						skinny: $.skinny,
 						ratio: rt.image.width / 64
 					};
-					SkinManager.createAtlasMat(nt);
-					this.skins[u] = nt;
-					
-					// スキンロード完了後、手の再生成が必要な場合は実行
-					if (customSkinApplied && handRecreationPending && hud3D) {
-						setTimeout(() => {
-							try {
-								if (hud3D.rightArm) {
-									hud3D.remove(hud3D.rightArm);
-									hud3D.rightArm = undefined;
-								}
-								hud3D.rightArm = new RightArm(nt);
-								hud3D.add(hud3D.rightArm);
-								handRecreationPending = false;
-							} catch(e) {
-								console.warn("Post-load hand recreation failed:", e);
-							}
-						}, 100);
-					}
-					
-					et();
+					SkinManager.createAtlasMat(nt), this.skins[u] = nt, et();
 				}, void 0, function(rt) {
-					console.error(rt);
-					et();
+					console.error(rt), et();
 				});
 			});
 		}
@@ -311,7 +240,7 @@ function modifyCode(text) {
 	// KEY FIX
 	addModification('Object.assign(keyMap,u)', '; keyMap["Semicolon"] = "semicolon"; keyMap["Apostrophe"] = "apostrophe";');
 
-	// COMMANDS - 基本的なコマンドのみ保持
+	// COMMANDS
 	addModification('submit(u){', /*js*/`
 		const str = this.inputValue.toLocaleLowerCase();
 		const args = str.split(" ");
@@ -340,28 +269,10 @@ function modifyCode(text) {
 				for(const [name, module] of Object.entries(modules)) chatString += "\\n" + name;
 				game.chat.addChat({text: chatString});
 				return this.closeInput();
-			case ".recreatehand":
-				// 手動で手を再生成するコマンド
-				if (hud3D && skinManager.skins["CustomSkin"]) {
-					try {
-						if (hud3D.rightArm) {
-							hud3D.remove(hud3D.rightArm);
-							hud3D.rightArm = undefined;
-						}
-						hud3D.rightArm = new RightArm(skinManager.skins["CustomSkin"]);
-						hud3D.add(hud3D.rightArm);
-						game.chat.addChat({text: "Hand recreated successfully!", color: "lime"});
-					} catch(e) {
-						game.chat.addChat({text: "Failed to recreate hand: " + e.message, color: "red"});
-					}
-				} else {
-					game.chat.addChat({text: "CustomSkin not loaded or hud3D not available", color: "red"});
-				}
-				return this.closeInput();
 		}
 	`);
 
-	// MAIN - 基本機能のみ保持（ブランディング削除）
+	// MAIN
 	addModification('document.addEventListener("contextmenu",m=>m.preventDefault());', /*js*/`
 		(function() {
 			class Module {
@@ -400,43 +311,11 @@ function modifyCode(text) {
 				}
 			}
 
-			// 基本的なモジュールのみ
+			//
 			new Module("MusicFix", function() {});
 
-			const customskin = new Module("CustomSkin", function(enabled) {
-				if (enabled) {
-					// 定期的に手の状態をチェックして必要に応じて再生成
-					renderTickLoop["CustomSkinHandCheck"] = function() {
-						if (customSkinApplied && hud3D && !hud3D.rightArm && skinManager.skins["CustomSkin"] && !handRecreationPending) {
-							handRecreationPending = true;
-							setTimeout(() => {
-								try {
-									if (hud3D && !hud3D.rightArm && skinManager.skins["CustomSkin"]) {
-										hud3D.rightArm = new RightArm(skinManager.skins["CustomSkin"]);
-										hud3D.add(hud3D.rightArm);
-									}
-									handRecreationPending = false;
-								} catch(e) {
-									console.warn("Periodic hand recreation failed:", e);
-									handRecreationPending = false;
-								}
-							}, 100);
-						}
-					};
-				} else {
-					delete renderTickLoop["CustomSkinHandCheck"];
-					customSkinApplied = false;
-					handRecreationPending = false;
-				}
-			});
+			const customskin = new Module("CustomSkin", function() {});
 			customskin.toggle();
-
-			// TextGUIモジュールを追加
-			const textgui = new Module("TextGUI", function() {});
-			textguifont = textgui.addoption("Font", String, "Arial");
-			textguisize = textgui.addoption("TextSize", Number, 15);
-			textguishadow = textgui.addoption("Shadow", Boolean, true);
-			textgui.toggle();
 
 			globalThis.${storeName}.modules = modules;
 			globalThis.${storeName}.profile = "default";
