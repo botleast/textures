@@ -149,6 +149,7 @@ function modifyCode(text) {
 			}
 			ctx.drawImage(img, posX, posY, sizeX, sizeY);
 			if (color) ctx.globalCompositeOperation = "source-over";
+			// Ensures the drawImage function is available for the TextGUI modification
 		}
 	`);
 
@@ -204,43 +205,42 @@ function modifyCode(text) {
 
 	// SKIN MODIFICATION
 	addModification('ClientSocket.on("CPacketSpawnPlayer",h=>{const p=m.world.getPlayerById(h.id);', `
-    	if (h.socketId === player.socketId && enabledModules["CustomSkin"]) {
-        	if (hud3D && hud3D.rightArm) {
-            	try {
-                	hud3D.remove(hud3D.rightArm);
-                	hud3D.rightArm = undefined;
-            	} catch(e) {
-                	console.warn("Hand removal failed:", e);
-            	}
-        	}
-        	player.profile.cosmetics.skin = "CustomSkin";
-        	h.cosmetics.skin = "CustomSkin";
-    	}
-    	if (h.cosmetics.skin == "CustomSkin") {
-        	p.profile.cosmetics.skin = "CustomSkin";
-    	}
+		if (h.socketId === player.socketId && enabledModules["CustomSkin"]) {
+			if (hud3D && hud3D.rightArm) {
+				try {
+					hud3D.remove(hud3D.rightArm);
+					hud3D.rightArm = undefined;
+				} catch(e) {
+					console.warn("Hand removal failed:", e);
+				}
+			}
+			player.profile.cosmetics.skin = "CustomSkin";
+			h.cosmetics.skin = "CustomSkin";
+		}
+		if (h.cosmetics.skin == "CustomSkin") {
+			p.profile.cosmetics.skin = "CustomSkin";
+		}
 	`);
 	addModification('bob:{id:"bob",name:"Bob",tier:0,skinny:!1},', 'CustomSkin:{id:"CustomSkin",name:"CustomSkin",tier:2,skinny:!1},');
 	addModification('async downloadSkin(u){', `
-    	if (u == "CustomSkin") {
-        	const $ = skins[u];
-        	return new Promise((et, tt) => {
-			
-            	//MODIFIED LINE TO USE DYNAMIC URL
-            	textureManager.loader.load(globalThis.${storeName}.customSkinUrl, rt => {
-                	const nt = {
-                    	atlas: rt,
-                    	id: u,
-                    	skinny: $.skinny,
-                    	ratio: rt.image.width / 64
-                	};
-                	SkinManager.createAtlasMat(nt), this.skins[u] = nt, et();
-            	}, void 0, function(rt) {
-                	console.error(rt), et();
-            	});
-        	});
-    	}
+		if (u == "CustomSkin") {
+			const $ = skins[u];
+			return new Promise((et, tt) => {
+				textureManager.loader.load(globalThis.${storeName}.customSkinUrl, rt => {
+					const nt = {
+						atlas: rt,
+						id: u,
+						skinny: $.skinny,
+						ratio: rt.image.width / 64
+					};
+					SkinManager.createAtlasMat(nt), this.skins[u] = nt, et();
+				}, void 0, function(rt) {
+					console.error(rt), et();
+				});
+			});
+		}
 	`);
+
 	// KEY FIX
 	addModification('Object.assign(keyMap,u)', '; keyMap["Semicolon"] = "semicolon"; keyMap["Apostrophe"] = "apostrophe";');
 
@@ -272,6 +272,15 @@ function modifyCode(text) {
 				chatString = "Module List\\n";
 				for(const [name, module] of Object.entries(modules)) chatString += "\\n" + name;
 				game.chat.addChat({text: chatString});
+				return this.closeInput();
+			case ".setskin":
+				if (args.length > 1) {
+					globalThis.${storeName}.customSkinUrl = args[1];
+					GM_setValue("vapeCustomSkinURL", args[1]);
+					game.chat.addChat({text: "Custom Skin URL set! Rejoin to apply.", color: "lime"});
+				} else {
+					game.chat.addChat({text: "Usage: .setskin [URL]", color: "red"});
+				}
 				return this.closeInput();
 		}
 	`);
@@ -315,19 +324,23 @@ function modifyCode(text) {
 				}
 			}
 
+			// MODULES
 			new Module("MusicFix", function() {});
 
 			const customskin = new Module("CustomSkin", function() {});
 			customskin.toggle();
 
+			// Initializing global store variables
 			globalThis.${storeName}.modules = modules;
 			globalThis.${storeName}.profile = "default";
-			globalThis.${storeName}.customSkinUrl = "https://t.novaskin.me/5b88b4accc65f1741e901e77e8d232b4a8087c770dd146b8928db24c03c90f6e";
+			globalThis.${storeName}.customSkinUrl = "https://t.novaskin.me/5b88b4accc65f1741e901e77e8d232b4a8087c770dd146b8928db24c03c90f6e"; // Default fallback
 		})();
 	`);
 
 	async function saveVapeConfig(profile) {
 		if (!loadedConfig) return;
+		GM_setValue("vapeCustomSkinURL", unsafeWindow.globalThis[storeName].customSkinUrl);
+		
 		let saveList = {};
 		for (const [name, module] of Object.entries(unsafeWindow.globalThis[storeName].modules)) {
 			saveList[name] = { enabled: module.enabled, bind: module.bind, options: {} };
@@ -339,30 +352,23 @@ function modifyCode(text) {
 		GM_setValue("mainVapeConfig", JSON.stringify({ profile: unsafeWindow.globalThis[storeName].profile }));
 	};
 
-	unsafeWindow.globalThis[storeName].saveVapeConfig = saveVapeConfig;
-	unsafeWindow.globalThis[storeName].loadVapeConfig = loadVapeConfig;
-
-	let skinURL = await GM_getValue("vapeCustomSkinURL", "");
-	if (skinURL.length > 5) {
-	    unsafeWindow.globalThis[storeName].customSkinUrl = skinURL;
-	}
-	loadVapeConfig();
-
 	async function loadVapeConfig(switched) {
 		loadedConfig = false;
 		const loadedMain = JSON.parse(await GM_getValue("mainVapeConfig", "{}")) ?? { profile: "default" };
 		unsafeWindow.globalThis[storeName].profile = switched ?? loadedMain.profile;
+		
+		//CUSTOM SKIN URL LOADING AND PROMPT
 		let skinURL = await GM_getValue("vapeCustomSkinURL", "");
-    	if (!skinURL || skinURL.length < 5) {
-        	const promptResult = prompt("Enter your custom skin URL:", "https://t.novaskin.me/5b88b4accc65f1741e901e77e8d232b4a8087c770dd146b8928db24c03c90f6e");
-        	if (promptResult && promptResult.length > 5) {
-            	skinURL = promptResult;
-            	GM_setValue("vapeCustomSkinURL", skinURL);
-        	} else {
-            skinURL = "https://t.novaskin.me/5b88b4accc65f1741e901e77e8d232b4a8087c770dd146b8928db24c03c90f6e";
-        	}
-    	}
-   		unsafeWindow.globalThis[storeName].customSkinUrl = skinURL;
+		if (!skinURL || skinURL.length < 5) {
+			const promptResult = prompt("Enter your custom Minecraft skin URL (e.g., from Novaskin or imgur):", "https://t.novaskin.me/5b88b4accc65f1741e901e77e8d232b4a8087c770dd146b8928db24c03c90f6e");
+			if (promptResult && promptResult.length > 5) {
+				skinURL = promptResult;
+				GM_setValue("vapeCustomSkinURL", skinURL);
+			} else {
+				skinURL = "https://t.novaskin.me/5b88b4accc65f1741e901e77e8d232b4a8087c770dd146b8928db24c03c90f6e";
+			}
+		}
+		unsafeWindow.globalThis[storeName].customSkinUrl = skinURL;
 		const loaded = JSON.parse(await GM_getValue("vapeConfig" + unsafeWindow.globalThis[storeName].profile, "{}"));
 		if (!loaded) {
 			loadedConfig = true;
@@ -393,7 +399,7 @@ function modifyCode(text) {
 		if (oldScript) oldScript.type = 'module';
 		await new Promise((resolve) => {
 			const loop = setInterval(async function () {
-				if (unsafeWindow.globalThis[storeName].modules) {
+				if (unsafeWindow.globalThis[storeName].modules) { 
 					clearInterval(loop);
 					resolve();
 				}
@@ -401,7 +407,8 @@ function modifyCode(text) {
 		});
 		unsafeWindow.globalThis[storeName].saveVapeConfig = saveVapeConfig;
 		unsafeWindow.globalThis[storeName].loadVapeConfig = loadVapeConfig;
-		loadVapeConfig();
+		loadVapeConfig(); 
+		
 		setInterval(async function () {
 			saveVapeConfig();
 		}, 10000);
