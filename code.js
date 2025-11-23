@@ -1,5 +1,3 @@
-(function () {
-	'use strict';
 	/**
 	 * @type {Record<string | RegExp, string>}
 	 */
@@ -618,5 +616,3 @@
 	}
 	setTimeout(whenReadyAndAttachUI, 1200);
 	try { window.__VAPE_SKIN_HELPERS = { defaultSkin: '/mnt/data/custom-skin.txt', storeName }; } catch(e) {}
-
-})();
