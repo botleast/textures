@@ -3,6 +3,7 @@
  */
 let replacements = {};
 let dumpedVarNames = {};
+// StoreName is randomized and used to store global variables accessible by injected code
 const storeName = "a" + crypto.randomUUID().replaceAll("-", "").substring(16);
 const vapeName = crypto.randomUUID().replaceAll("-", "").substring(16);
 const VERSION = "3.0.7";
@@ -93,16 +94,21 @@ function modifyCode(text) {
 		}, 0);
 	`);
 
-	//MENU TOGGLE
+	// Add menu toggle functionality
 	addModification('Potions.jump.getId(),"5");', `
 		let enabledModules = {};
 		let modules = {};
+
 		let keybindCallbacks = {};
 		let keybindList = {};
+
 		let tickLoop = {};
 		let renderTickLoop = {};
+
 		let textguifont, textguisize, textguishadow;
+		
 		let menuOpen = false; // New state variable
+
 		function getModule(s) {
 			for(const [n, m] of Object.entries(modules)) {
 				if (n.toLocaleLowerCase() == s.toLocaleLowerCase()) return m;
@@ -156,8 +162,10 @@ function modifyCode(text) {
 		}
 	`);
 	
-	// Menu Rendering Hook:
-	addModification('</div><div class="chat-container">', /*html*/`
+	// Menu Rendering Hook: Inject menu HTML right before or after the chat box
+	// **CRITICAL FIX: Using backticks (`) for the template literal and ensuring the code is valid.**
+	addModification('</div><div class="chat-container">', `
+		</div>
 		<div id="${vapeName}-menu" style="
 			display: none;
 			position: absolute;
@@ -166,26 +174,26 @@ function modifyCode(text) {
 			transform: translate(-50%, -50%);
 			z-index: 1000;
 			padding: 20px;
-			background: rgba(0, 0, 0, 0.8);
+			background: rgba(0, 0, 0, 0.9); /* Slightly darker background */
 			border: 2px solid #36a;
 			border-radius: 8px;
 			color: white;
 			font-family: Arial, sans-serif;
 			width: 400px;
+			box-shadow: 0 0 20px rgba(51, 102, 170, 0.5); /* Blue glow */
 		">
 			<h2 style="margin-top: 0; border-bottom: 1px solid #36a; padding-bottom: 10px;">Custom Skin Settings</h2>
 			<div style="margin-bottom: 15px;">
 				<label for="skin-url-input" style="display: block; margin-bottom: 5px;">Minecraft Skin URL (64x64 or 64x32):</label>
 				<input type="text" id="skin-url-input" placeholder="Paste your skin URL here..." style="width: 100%; padding: 8px; box-sizing: border-box; background: #222; border: 1px solid #555; color: white;">
 			</div>
-			<button onclick="globalThis.${storeName}.applySkinUrl()" style="width: 100%; padding: 10px; background: #36a; border: none; border-radius: 5px; color: white; font-size: 16px; cursor: pointer;">
+			<button onclick="globalThis.${storeName}.applySkinUrl()" style="width: 100%; padding: 10px; background: #36a; border: none; border-radius: 5px; color: white; font-size: 16px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#47b'" onmouseout="this.style.background='#36a'">
 				Apply & Reload Skin Texture
 			</button>
-			<p style="margin-top: 15px; font-size: 0.8em; color: #aaa;">Press '\\' key to close.</p>
+			<p style="margin-top: 15px; font-size: 0.8em; color: #aaa; text-align: center;">Press '\\' key to close | Use .setskin in chat for quick changes</p>
 		</div>
-		</div><div class="chat-container">
-	`, false);
-
+		<div class="chat-container">
+	`, true); // Setting replace to true to ensure clean injection
 
 	// TEXT GUI
 	addModification('(this.drawSelectedItemStack(),this.drawHintBox())', /*js*/`
@@ -237,7 +245,7 @@ function modifyCode(text) {
 	addModification('bindKeysWithDefaults("b",m=>{', 'bindKeysWithDefaults("semicolon",m=>{', true);
 	addModification('bindKeysWithDefaults("i",m=>{', 'bindKeysWithDefaults("apostrophe",m=>{', true);
 
-	// SKIN MODIFICATION
+	// SKIN MODIFICATION (Updated to use dynamic URL and allow seeing other custom skins)
 	addModification('ClientSocket.on("CPacketSpawnPlayer",h=>{const p=m.world.getPlayerById(h.id);', `
 		if (h.socketId === player.socketId && enabledModules["CustomSkin"]) {
 			if (hud3D && hud3D.rightArm) {
@@ -313,7 +321,7 @@ function modifyCode(text) {
 				if (args.length > 1) {
 					globalThis.${storeName}.customSkinUrl = args[1];
 					GM_setValue("vapeCustomSkinURL", args[1]);
-					globalThis.${storeName}.reloadCustomSkin(); // Use the new reload function
+					globalThis.${storeName}.reloadCustomSkin();
 					game.chat.addChat({text: "Custom Skin URL set! Skin texture reloaded.", color: "lime"});
 				} else {
 					game.chat.addChat({text: "Usage: .setskin [URL]", color: "red"});
@@ -374,20 +382,54 @@ function modifyCode(text) {
 		})();
 	`);
 
+	// --- NEW FUNCTIONS FOR MENU & RELOAD ---
 	async function reloadCustomSkin() {
-		delete unsafeWindow.textureManager.loader.textureCache[unsafeWindow.globalThis[storeName].customSkinUrl];
-		delete unsafeWindow.skinManager.skins["CustomSkin"];
-		await unsafeWindow.skinManager.downloadSkin("CustomSkin");
+		// 1. Remove the old skin texture from the THREE.js loader cache
+		const manager = unsafeWindow.skinManager;
+		const loader = manager.loader;
+		const url = unsafeWindow.globalThis[storeName].customSkinUrl;
+		
+		// 1a. Attempt to remove from texture cache (Miniblox uses THREE.js/PIXI.js which might cache textures)
+		if (loader.textureCache[url]) {
+			delete loader.textureCache[url];
+		}
+		
+		// 2. Clear the skin manager's stored skin atlas
+		if (manager.skins["CustomSkin"]) {
+			delete manager.skins["CustomSkin"];
+		}
+		
+		// 3. Force the game to reload the skin
+		await manager.downloadSkin("CustomSkin");
+		
+		// 4. Force player skin refresh (necessary for local client visibility)
+		const player = unsafeWindow.player;
+		if (player) {
+			// Trigger a re-render/update if possible (may require leaving and rejoining or changing clothes)
+			// A simple way is to force the game to re-load the profile texture
+			player.profile.cosmetics.skin = "bob"; // Temporarily change it
+			player.profile.cosmetics.skin = "CustomSkin"; // Change it back to force reload
+		}
 	}
 
 	function toggleMenu() {
 		const menu = document.getElementById(`${vapeName}-menu`);
 		const input = document.getElementById('skin-url-input');
 		if (!menu || !input) return;
-		unsafeWindow.menuOpen = !unsafeWindow.menuOpen; 
-		menu.style.display = unsafeWindow.menuOpen ? 'block' : 'none';
-		if (unsafeWindow.menuOpen) {
+
+		// Toggle menu state
+		let menuOpen = menu.style.display === 'block';
+		menuOpen = !menuOpen;
+		menu.style.display = menuOpen ? 'block' : 'none';
+
+		// Update input field with current saved URL when opening
+		if (menuOpen) {
 			input.value = unsafeWindow.globalThis[storeName].customSkinUrl;
+			input.focus(); // Focus on the input field
+		} else {
+			// Blur focus when closing so keybinds work again
+			input.blur();
+			unsafeWindow.Game.releaseKeys(); // Ensure game controls are re-enabled
 		}
 	}
 
@@ -401,12 +443,15 @@ function modifyCode(text) {
 			GM_setValue("vapeCustomSkinURL", newUrl);
 			reloadCustomSkin();
 		}
-		toggleMenu();
+		toggleMenu(); // Close menu after applying
 	}
+	// --- END NEW FUNCTIONS ---
 
 	async function saveVapeConfig(profile) {
 		if (!loadedConfig) return;
+		// Save skin URL separately
 		GM_setValue("vapeCustomSkinURL", unsafeWindow.globalThis[storeName].customSkinUrl);
+		
 		let saveList = {};
 		for (const [name, module] of Object.entries(unsafeWindow.globalThis[storeName].modules)) {
 			saveList[name] = { enabled: module.enabled, bind: module.bind, options: {} };
@@ -422,10 +467,14 @@ function modifyCode(text) {
 		loadedConfig = false;
 		const loadedMain = JSON.parse(await GM_getValue("mainVapeConfig", "{}")) ?? { profile: "default" };
 		unsafeWindow.globalThis[storeName].profile = switched ?? loadedMain.profile;
+		
+		// --- CUSTOM SKIN URL LOADING (NO PROMPT) ---
 		let skinURL = await GM_getValue("vapeCustomSkinURL", "");
 		if (skinURL.length > 5) {
 			unsafeWindow.globalThis[storeName].customSkinUrl = skinURL;
 		}
+		// --- END CUSTOM SKIN URL LOADING ---
+		
 		const loaded = JSON.parse(await GM_getValue("vapeConfig" + unsafeWindow.globalThis[storeName].profile, "{}"));
 		if (!loaded) {
 			loadedConfig = true;
@@ -456,6 +505,7 @@ function modifyCode(text) {
 		if (oldScript) oldScript.type = 'module';
 		await new Promise((resolve) => {
 			const loop = setInterval(async function () {
+				// Wait until the mod's initial global variables are set up
 				if (unsafeWindow.globalThis[storeName].modules) { 
 					clearInterval(loop);
 					resolve();
@@ -463,6 +513,7 @@ function modifyCode(text) {
 			}, 10);
 		});
 		
+		// Expose new functions to global store for access from injected HTML/JS
 		unsafeWindow.globalThis[storeName].saveVapeConfig = saveVapeConfig;
 		unsafeWindow.globalThis[storeName].loadVapeConfig = loadVapeConfig;
 		unsafeWindow.globalThis[storeName].reloadCustomSkin = reloadCustomSkin;
