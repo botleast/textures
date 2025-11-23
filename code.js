@@ -222,7 +222,7 @@ function modifyCode(text) {
 		if (u == "CustomSkin") {
 			const $ = skins[u];
 			return new Promise((et, tt) => {
-				textureManager.loader.load("https://t.novaskin.me/1f769e7a3b71e95c9fd291dfe9979aebccbffbbe37d22126e9f187060ac99484", rt => {
+				textureManager.loader.load("https://t.novaskin.me/5b88b4accc65f1741e901e77e8d232b4a8087c770dd146b8928db24c03c90f6e", rt => {
 					const nt = {
 						atlas: rt,
 						id: u,
