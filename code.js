@@ -216,6 +216,10 @@ function modifyCode(text) {
 			player.profile.cosmetics.skin = "CustomSkin";
 			h.cosmetics.skin = "CustomSkin";
 		}
+		if (h.cosmetics.skin == "CustomSkin") {
+        	h.cosmetics.skin = "CustomSkin"; // Redundant but good practice
+        	p.profile.cosmetics.skin = "CustomSkin";
+    	}
 	`);
 	addModification('bob:{id:"bob",name:"Bob",tier:0,skinny:!1},', 'CustomSkin:{id:"CustomSkin",name:"CustomSkin",tier:2,skinny:!1},');
 	addModification('async downloadSkin(u){', `
