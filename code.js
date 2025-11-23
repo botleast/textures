@@ -93,18 +93,16 @@ function modifyCode(text) {
 		}, 0);
 	`);
 
+	//MENU TOGGLE
 	addModification('Potions.jump.getId(),"5");', `
 		let enabledModules = {};
 		let modules = {};
-
 		let keybindCallbacks = {};
 		let keybindList = {};
-
 		let tickLoop = {};
 		let renderTickLoop = {};
-
 		let textguifont, textguisize, textguishadow;
-
+		let menuOpen = false; // New state variable
 		function getModule(s) {
 			for(const [n, m] of Object.entries(modules)) {
 				if (n.toLocaleLowerCase() == s.toLocaleLowerCase()) return m;
@@ -114,7 +112,13 @@ function modifyCode(text) {
 		let j;
 		for (j = 0; j < 26; j++) keybindList[j + 65] = keybindList["Key" + String.fromCharCode(j + 65)] = String.fromCharCode(j + 97);
 		for (j = 0; j < 10; j++) keybindList[48 + j] = keybindList["Digit" + j] = "" + j;
+		keybindList[220] = keybindList["Backslash"] = "\\"; // Add Backslash keycode
+		
 		window.addEventListener("keydown", function(key) {
+			if (key.code === "Backslash") {
+				globalThis.${storeName}.toggleMenu();
+				return;
+			}
 			const func = keybindCallbacks[keybindList[key.code]];
 			if (func) func(key);
 		});
@@ -149,9 +153,39 @@ function modifyCode(text) {
 			}
 			ctx.drawImage(img, posX, posY, sizeX, sizeY);
 			if (color) ctx.globalCompositeOperation = "source-over";
-			// Ensures the drawImage function is available for the TextGUI modification
 		}
 	`);
+	
+	// Menu Rendering Hook:
+	addModification('</div><div class="chat-container">', /*html*/`
+		<div id="${vapeName}-menu" style="
+			display: none;
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			z-index: 1000;
+			padding: 20px;
+			background: rgba(0, 0, 0, 0.8);
+			border: 2px solid #36a;
+			border-radius: 8px;
+			color: white;
+			font-family: Arial, sans-serif;
+			width: 400px;
+		">
+			<h2 style="margin-top: 0; border-bottom: 1px solid #36a; padding-bottom: 10px;">Custom Skin Settings</h2>
+			<div style="margin-bottom: 15px;">
+				<label for="skin-url-input" style="display: block; margin-bottom: 5px;">Minecraft Skin URL (64x64 or 64x32):</label>
+				<input type="text" id="skin-url-input" placeholder="Paste your skin URL here..." style="width: 100%; padding: 8px; box-sizing: border-box; background: #222; border: 1px solid #555; color: white;">
+			</div>
+			<button onclick="globalThis.${storeName}.applySkinUrl()" style="width: 100%; padding: 10px; background: #36a; border: none; border-radius: 5px; color: white; font-size: 16px; cursor: pointer;">
+				Apply & Reload Skin Texture
+			</button>
+			<p style="margin-top: 15px; font-size: 0.8em; color: #aaa;">Press '\\' key to close.</p>
+		</div>
+		</div><div class="chat-container">
+	`, false);
+
 
 	// TEXT GUI
 	addModification('(this.drawSelectedItemStack(),this.drawHintBox())', /*js*/`
@@ -217,6 +251,7 @@ function modifyCode(text) {
 			player.profile.cosmetics.skin = "CustomSkin";
 			h.cosmetics.skin = "CustomSkin";
 		}
+		// Logic to see other players' custom skins if they are using the mod
 		if (h.cosmetics.skin == "CustomSkin") {
 			p.profile.cosmetics.skin = "CustomSkin";
 		}
@@ -226,6 +261,7 @@ function modifyCode(text) {
 		if (u == "CustomSkin") {
 			const $ = skins[u];
 			return new Promise((et, tt) => {
+				// MODIFIED TO USE DYNAMIC URL FROM GLOBAL STORE
 				textureManager.loader.load(globalThis.${storeName}.customSkinUrl, rt => {
 					const nt = {
 						atlas: rt,
@@ -242,8 +278,8 @@ function modifyCode(text) {
 	`);
 
 	// KEY FIX
-	addModification('Object.assign(keyMap,u)', '; keyMap["Semicolon"] = "semicolon"; keyMap["Apostrophe"] = "apostrophe";');
-
+	addModification('Object.assign(keyMap,u)', '; keyMap["Semicolon"] = "semicolon"; keyMap["Apostrophe"] = "apostrophe"; keyMap["Backslash"] = "backslash";');
+	
 	// COMMANDS
 	addModification('submit(u){', /*js*/`
 		const str = this.inputValue.toLocaleLowerCase();
@@ -277,7 +313,8 @@ function modifyCode(text) {
 				if (args.length > 1) {
 					globalThis.${storeName}.customSkinUrl = args[1];
 					GM_setValue("vapeCustomSkinURL", args[1]);
-					game.chat.addChat({text: "Custom Skin URL set! Rejoin to apply.", color: "lime"});
+					globalThis.${storeName}.reloadCustomSkin(); // Use the new reload function
+					game.chat.addChat({text: "Custom Skin URL set! Skin texture reloaded.", color: "lime"});
 				} else {
 					game.chat.addChat({text: "Usage: .setskin [URL]", color: "red"});
 				}
@@ -337,10 +374,39 @@ function modifyCode(text) {
 		})();
 	`);
 
+	async function reloadCustomSkin() {
+		delete unsafeWindow.textureManager.loader.textureCache[unsafeWindow.globalThis[storeName].customSkinUrl];
+		delete unsafeWindow.skinManager.skins["CustomSkin"];
+		await unsafeWindow.skinManager.downloadSkin("CustomSkin");
+	}
+
+	function toggleMenu() {
+		const menu = document.getElementById(`${vapeName}-menu`);
+		const input = document.getElementById('skin-url-input');
+		if (!menu || !input) return;
+		unsafeWindow.menuOpen = !unsafeWindow.menuOpen; 
+		menu.style.display = unsafeWindow.menuOpen ? 'block' : 'none';
+		if (unsafeWindow.menuOpen) {
+			input.value = unsafeWindow.globalThis[storeName].customSkinUrl;
+		}
+	}
+
+	function applySkinUrl() {
+		const input = document.getElementById('skin-url-input');
+		if (!input) return;
+
+		const newUrl = input.value.trim();
+		if (newUrl.length > 5) {
+			unsafeWindow.globalThis[storeName].customSkinUrl = newUrl;
+			GM_setValue("vapeCustomSkinURL", newUrl);
+			reloadCustomSkin();
+		}
+		toggleMenu();
+	}
+
 	async function saveVapeConfig(profile) {
 		if (!loadedConfig) return;
 		GM_setValue("vapeCustomSkinURL", unsafeWindow.globalThis[storeName].customSkinUrl);
-		
 		let saveList = {};
 		for (const [name, module] of Object.entries(unsafeWindow.globalThis[storeName].modules)) {
 			saveList[name] = { enabled: module.enabled, bind: module.bind, options: {} };
@@ -356,19 +422,10 @@ function modifyCode(text) {
 		loadedConfig = false;
 		const loadedMain = JSON.parse(await GM_getValue("mainVapeConfig", "{}")) ?? { profile: "default" };
 		unsafeWindow.globalThis[storeName].profile = switched ?? loadedMain.profile;
-		
-		//CUSTOM SKIN URL LOADING AND PROMPT
 		let skinURL = await GM_getValue("vapeCustomSkinURL", "");
-		if (!skinURL || skinURL.length < 5) {
-			const promptResult = prompt("Enter your custom Minecraft skin URL (e.g., from Novaskin or imgur):", "https://t.novaskin.me/5b88b4accc65f1741e901e77e8d232b4a8087c770dd146b8928db24c03c90f6e");
-			if (promptResult && promptResult.length > 5) {
-				skinURL = promptResult;
-				GM_setValue("vapeCustomSkinURL", skinURL);
-			} else {
-				skinURL = "https://t.novaskin.me/5b88b4accc65f1741e901e77e8d232b4a8087c770dd146b8928db24c03c90f6e";
-			}
+		if (skinURL.length > 5) {
+			unsafeWindow.globalThis[storeName].customSkinUrl = skinURL;
 		}
-		unsafeWindow.globalThis[storeName].customSkinUrl = skinURL;
 		const loaded = JSON.parse(await GM_getValue("vapeConfig" + unsafeWindow.globalThis[storeName].profile, "{}"));
 		if (!loaded) {
 			loadedConfig = true;
@@ -405,8 +462,13 @@ function modifyCode(text) {
 				}
 			}, 10);
 		});
+		
 		unsafeWindow.globalThis[storeName].saveVapeConfig = saveVapeConfig;
 		unsafeWindow.globalThis[storeName].loadVapeConfig = loadVapeConfig;
+		unsafeWindow.globalThis[storeName].reloadCustomSkin = reloadCustomSkin;
+		unsafeWindow.globalThis[storeName].toggleMenu = toggleMenu;
+		unsafeWindow.globalThis[storeName].applySkinUrl = applySkinUrl;
+
 		loadVapeConfig(); 
 		
 		setInterval(async function () {
